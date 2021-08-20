@@ -161,12 +161,13 @@ class ModflowWel(Package):
 
         # set filenames
         if filenames is None:
-            filenames = [None, None]
+            filenames = [None, None, None]
         elif isinstance(filenames, str):
-            filenames = [filenames, None]
+            filenames = [filenames, None, None]
         elif isinstance(filenames, list):
-            if len(filenames) < 2:
-                filenames.append(None)
+            if len(filenames) < 3:
+                for idx in range(len(filenames), 3):
+                    filenames.append(None)
 
         # update external file information with cbc output, if necessary
         if ipakcb is not None:
@@ -208,7 +209,13 @@ class ModflowWel(Package):
         self.specify = False
         self.phiramp = None
         self.iunitramp = None
+
+        self.autoflowreduce = False # mfusg: adjust well pumping rate
+        self.iunitafr = 0           # mfusg: autoflowreduce file unit number
+
+        self.clnitmp = None  # number of cln wells in each stress period
         self.options = options
+
         if isinstance(options, OptionBlock):
             if not self.options.specify:
                 self.specify = self.options.specify
@@ -228,14 +235,32 @@ class ModflowWel(Package):
                     self.phiramp = float(t[1])
                     self.iunitramp = int(t[2])
                     self.options.pop(idx)
-                    break
+                if "autoflowreduce" in opt:  # mfusg: adjust well pumping rate
+                    self.autoflowreduce = True
+                if "iunitafr" in opt:  # mfusg: autoflowreduce file unit number
+                    t = opt.strip().split()
+                    self.iunitafr = int(t[1])
+                if "clnwel" in opt:  # mfusg: wells simulated as cln
+                    t = opt.strip().split()
+                    clnitmp = []
+                    for i in range(len(t)-1):
+                        clnitmp.append(int(t[i+1])) 
+                    self.clnitmp = clnitmp
+
+        if self.iunitafr>0:       
+            fname = filenames[2]
+            model.add_output_file(
+                self.iunitafr, fname=fname, extension='afr', binflag=False, 
+                package=ModflowWel._ftype()
+            )
 
         if dtype is not None:
             self.dtype = dtype
         else:
-            self.dtype = self.get_default_dtype(
-                structured=self.parent.structured
-            )
+            structured=self.parent.structured
+            if self.clnitmp is not None:
+                structured=False
+            self.dtype = self.get_default_dtype(structured)
 
         # determine if any aux variables in dtype
         dt = self.get_default_dtype(structured=self.parent.structured)
@@ -345,7 +370,8 @@ class ModflowWel(Package):
 
         else:
             for opt in self.options:
-                line += " " + str(opt)
+                if "clnwel" not in opt:  # mfusg
+                    line += " " + str(opt)
 
         line += "\n"
         f_wel.write(line)
@@ -367,7 +393,7 @@ class ModflowWel(Package):
                     )
                 )
 
-        self.stress_period_data.write_transient(f_wel)
+        self.stress_period_data.write_transient(f_wel,clnitmp=self.clnitmp)
         f_wel.close()
 
     def add_record(self, kper, index, values):

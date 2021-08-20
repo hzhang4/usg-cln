@@ -657,7 +657,7 @@ class MfList(DataInterface, DataListInterface):
     def binary(self):
         return bool(self.__binary)
 
-    def write_transient(self, f, single_per=None, forceInternal=False):
+    def write_transient(self, f, single_per=None, forceInternal=False, clnitmp=None):
         # forceInternal overrides isExternal (set below) for cases where
         # external arrays are not supported (oh hello MNW1!)
         # write the transient sequence described by the data dict
@@ -697,12 +697,21 @@ class MfList(DataInterface, DataListInterface):
                 itmp = -1
                 kper_vtype = int
 
-            f.write(
-                " {0:9d} {1:9d} # stress period {2:d}\n".format(
-                    itmp, 0, kper + 1
+            if clnitmp is not None:  # mfusg
+                itmpcln = clnitmp[kper]
+                itmpp = itmp - itmpcln
+                f.write(
+                    " {0:9d} {1:9d} {2:9d}  # stress period {2:d}\n".format(
+                        itmpp, 0, itmpcln, kper + 1
+                    )
                 )
-            )
-
+            else :
+                f.write(
+                    " {0:9d} {1:9d}  # stress period {2:d}\n".format(
+                        itmp, 0, 0, kper + 1
+                    )
+                )
+		 
             isExternal = False
             if (
                 self._model.array_free_format

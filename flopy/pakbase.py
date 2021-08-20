@@ -1038,6 +1038,9 @@ class Package(PackageInterface):
         bnd_output = None
         stress_period_data = {}
         current = None
+        clnitmp = [0] * nper
+        clnwel  = False
+
         for iper in range(nper):
             if model.verbose:
                 msg = "   loading {} for kper {:5d}".format(pak_type, iper + 1)
@@ -1054,19 +1057,29 @@ class Package(PackageInterface):
                 if model.verbose:
                     print("   implicit itmpp in {}".format(filename))
 
+            structured = model.structured
+            try:
+                itmpcln = int(t[2])
+                itmp = itmp + itmpcln
+                clnitmp[iper] = itmpcln
+                clnwel = True
+                structured = False
+            except:
+                pass
+
             if itmp == 0:
                 bnd_output = None
                 current = pak_type.get_empty(
-                    itmp, aux_names=aux_names, structured=model.structured
+                    itmp, aux_names=aux_names, structured=structured
                 )
             elif itmp > 0:
                 current = pak_type.get_empty(
-                    itmp, aux_names=aux_names, structured=model.structured
+                    itmp, aux_names=aux_names, structured=structured
                 )
                 current = ulstrd(
                     f, itmp, current, model, sfac_columns, ext_unit_dict
                 )
-                if model.structured:
+                if structured:
                     current["k"] -= 1
                     current["i"] -= 1
                     current["j"] -= 1
@@ -1147,12 +1160,15 @@ class Package(PackageInterface):
                 stress_period_data[iper] = bnd_output
 
         dtype = pak_type.get_empty(
-            0, aux_names=aux_names, structured=model.structured
+            0, aux_names=aux_names, structured=structured
         ).dtype
 
         if openfile:
             f.close()
 
+        if clnwel:
+            options.append("clnwel "+" ".join([str(s) for s in clnitmp]))
+            
         # set package unit number
         filenames = [None, None]
         if ext_unit_dict is not None:
